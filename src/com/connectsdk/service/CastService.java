@@ -20,8 +20,19 @@
 
 package com.connectsdk.service;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArraySet;
+
+import org.json.JSONObject;
+
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.connectsdk.core.ImageInfo;
@@ -60,16 +71,6 @@ import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.common.images.WebImage;
 
-import org.json.JSONObject;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArraySet;
-
 public class CastService extends DeviceService implements MediaPlayer, MediaControl, VolumeControl, WebAppLauncher {
     interface ConnectionListener {
         void onConnected();
@@ -107,6 +108,11 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
     float currentVolumeLevel;
     boolean currentMuteStatus;
     boolean mWaitingForReconnect;
+    
+    
+    private String messageCallbackNamespace;
+    private com.google.android.gms.cast.Cast.MessageReceivedCallback messageCallback;
+
     
     static String applicationID = CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID;
 
@@ -459,6 +465,12 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             try {
                 Cast.CastApi.setMessageReceivedCallbacks(mApiClient, mMediaPlayer.getNamespace(),
                         mMediaPlayer);
+                if (CastService.this.messageCallback != null
+                        && !TextUtils.isEmpty(CastService.this.messageCallbackNamespace)) {
+                    Cast.CastApi.setMessageReceivedCallbacks(CastService.this.mApiClient,
+                            CastService.this.messageCallbackNamespace,
+                            CastService.this.messageCallback);
+                }
             } catch (Exception e) {
                 Log.w(Util.T, "Exception while creating media channel", e);
             }
@@ -474,6 +486,11 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             try {
                 Cast.CastApi.removeMessageReceivedCallbacks(mApiClient,
                         mMediaPlayer.getNamespace());
+                if (!TextUtils.isEmpty(CastService.this.messageCallbackNamespace)) {
+                    Cast.CastApi.removeMessageReceivedCallbacks(
+                            CastService.this.mApiClient,
+                            CastService.this.messageCallbackNamespace);
+                }
             } catch (IOException e) {
                 Log.w(Util.T, "Exception while launching application", e);
             }
@@ -528,8 +545,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         displayImage(mediaUrl, mimeType, title, desc, iconSrc, listener);
     }
 
-    @Override
-    public void playMedia(String url, String mimeType, String title,
+    private void playMedia(Map<String, String> metadata, String url, String mimeType, String title,
                           String description, String iconSrc, boolean shouldLoop,
                           LaunchListener listener) {
         MediaMetadata mMediaMetadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
@@ -541,7 +557,13 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             WebImage image = new WebImage(iconUri, 100, 100);
             mMediaMetadata.addImage(image);
         }
-
+        if (metadata != null) {
+        	for (Map.Entry<String, String> entry : metadata.entrySet()) {
+        		mMediaMetadata.putString(entry.getKey(), entry.getValue());
+        	}
+        }
+        	
+        
         com.google.android.gms.cast.MediaInfo mediaInformation = new com.google.android.gms.cast.MediaInfo.Builder(url)
                 .setContentType(mimeType)
                 .setStreamType(com.google.android.gms.cast.MediaInfo.STREAM_TYPE_BUFFERED)
@@ -553,6 +575,14 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         playMedia(mediaInformation, applicationID, listener);
     }
 
+    
+    @Override
+    public void playMedia(String url, String mimeType, String title,
+                          String description, String iconSrc, boolean shouldLoop,
+                          LaunchListener listener) {
+    	playMedia(null, url, mimeType, title, description, iconSrc, shouldLoop, listener);
+    }
+
     @Override
     public void playMedia(MediaInfo mediaInfo, boolean shouldLoop, LaunchListener listener) {
         String mediaUrl = null;
@@ -560,12 +590,14 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         String title = null;
         String desc = null;
         String iconSrc = null;
+        Map<String,String> metadata = null;
 
         if (mediaInfo != null) {
             mediaUrl = mediaInfo.getUrl();
             mimeType = mediaInfo.getMimeType();
             title = mediaInfo.getTitle();
             desc = mediaInfo.getDescription();
+            metadata = mediaInfo.getMetadata();
 
             if (mediaInfo.getImages() != null && mediaInfo.getImages().size() > 0) {
                 ImageInfo imageInfo = mediaInfo.getImages().get(0);
@@ -573,7 +605,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             }
         }
 
-        playMedia(mediaUrl, mimeType, title, desc, iconSrc, shouldLoop, listener);
+        playMedia(metadata, mediaUrl, mimeType, title, desc, iconSrc, shouldLoop, listener);
     }
 
     private void playMedia(final com.google.android.gms.cast.MediaInfo mediaInformation, final String mediaAppId, final LaunchListener listener) {
@@ -794,6 +826,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         }
     }
 
+    
     public void joinApplication(final ResponseListener<Object> listener) {
         ConnectionListener connectionListener = new ConnectionListener() {
 
@@ -1323,6 +1356,19 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
     public void getPlayState(PlayStateListener listener) {
         if (mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
             PlayStateStatus status = PlayStateStatus.convertPlayerStateToPlayStateStatus(mMediaPlayer.getMediaStatus().getPlayerState());
+            mMediaPlayer.getMediaStatus().getIdleReason();
+            Util.postSuccess(listener, status);
+        }
+        else {
+            Util.postError(listener, new ServiceCommandError(0, "There is no media currently available", null));
+        }
+    }
+    
+    public static interface PlayIdleReasonListener extends ResponseListener<Integer> { }
+    
+    public void getIdleReason(PlayIdleReasonListener listener) {
+        if (mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
+        	Integer status = mMediaPlayer.getMediaStatus().getIdleReason();
             Util.postSuccess(listener, status);
         }
         else {
@@ -1383,4 +1429,52 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         }
     }
 
+    public void addMessageReceiver(
+            final com.google.android.gms.cast.Cast.MessageReceivedCallback callback,
+            final String namespace) {
+
+        this.messageCallbackNamespace = namespace;
+        this.messageCallback = callback;
+        Log.v("Cast", "adding messageReceiver" + namespace);
+    }
+    
+    public void leaveMedia(final LaunchSession launchSession,
+            final ResponseListener<Object> listener) {
+        if (!this.mApiClient.isConnected()) {
+            Util.postError(listener, new ServiceCommandError(-1,
+                    "The Google Cast API Client is not connected", null));
+            return;
+        }
+
+        ConnectionListener connectionListener = new ConnectionListener() {
+
+            @Override
+            public void onConnected() {
+                Cast.CastApi.leaveApplication(CastService.this.mApiClient).setResultCallback(
+                        new ResultCallback<Status>() {
+
+                            @Override
+                            public void onResult(final Status result) {
+                                if (result != null && result.isSuccess()) {
+
+                                    if (launchSession != null && launchSession.getService() != null) {
+                                        ((CastService)launchSession.getService())
+                                                .detachMediaPlayer();
+                                    }
+
+                                    Util.postSuccess(listener, result);
+                                } else {
+                                    Util.postError(
+                                            listener,
+                                            new ServiceCommandError(result != null ? result
+                                                    .getStatusCode() : 0, result != null ? result
+                                                    .getStatusMessage() : "", result));
+                                }
+                            }
+                        });
+            }
+        };
+
+        runCommand(connectionListener);
+    }
 }

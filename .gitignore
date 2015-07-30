@@ -6,6 +6,7 @@ bin/
 gen/
 .gradle/
 build/
+target/
 local.properties
 proguard/
 *.pydevproject
