@@ -881,6 +881,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
 
                     @Override
                     public void onSuccess(Object object) {
+                    	//made the restore of playing session
                         requestStatus(new ResponseListener<Object>() {
                             @Override
                             public void onSuccess(Object object) {
@@ -1436,6 +1437,25 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         this.messageCallbackNamespace = namespace;
         this.messageCallback = callback;
         Log.v("Cast", "adding messageReceiver" + namespace);
+        
+        if ((mMediaPlayer != null) && (mApiClient != null) && CastService.this.messageCallback != null
+                && !TextUtils.isEmpty(CastService.this.messageCallbackNamespace)) {
+            try {
+                Cast.CastApi.removeMessageReceivedCallbacks(
+                        CastService.this.mApiClient,
+                        CastService.this.messageCallbackNamespace);
+            } catch (Exception e) {
+                Log.w(Util.T, "Exception while cleaning the custom message listener", e);
+            }
+            try {
+                Cast.CastApi.setMessageReceivedCallbacks(CastService.this.mApiClient,
+                        CastService.this.messageCallbackNamespace,
+                        CastService.this.messageCallback);
+            } catch (Exception e) {
+                Log.w(Util.T, "Exception while adding the custom message listener", e);
+            }
+        }
+        Log.v("Cast", "added messageReceiver");
     }
     
     public void leaveMedia(final LaunchSession launchSession,
