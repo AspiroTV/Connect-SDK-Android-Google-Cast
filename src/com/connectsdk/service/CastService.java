@@ -435,7 +435,8 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
                                 @SuppressWarnings("unchecked")
                                 ResponseListener<Object> listener = (ResponseListener<Object>) subscription.getListeners().get(i);
                                 if (mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
-                                    PlayStateStatus status = PlayStateStatus.convertPlayerStateToPlayStateStatus(mMediaPlayer.getMediaStatus().getPlayerState());
+                                    PlayStateStatus status = PlayStateStatus.convertPlayerStateToPlayStateStatus(mMediaPlayer.getMediaStatus().getPlayerState()
+                                    		, mMediaPlayer.getMediaStatus().getIdleReason());
                                     Util.postSuccess(listener, status);
                                 }
                             }
@@ -1356,7 +1357,8 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
     @Override
     public void getPlayState(PlayStateListener listener) {
         if (mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
-            PlayStateStatus status = PlayStateStatus.convertPlayerStateToPlayStateStatus(mMediaPlayer.getMediaStatus().getPlayerState());
+            PlayStateStatus status = PlayStateStatus.convertPlayerStateToPlayStateStatus(mMediaPlayer.getMediaStatus().getPlayerState(),
+            		mMediaPlayer.getMediaStatus().getIdleReason());
             mMediaPlayer.getMediaStatus().getIdleReason();
             Util.postSuccess(listener, status);
         }
