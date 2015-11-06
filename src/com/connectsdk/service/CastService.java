@@ -661,8 +661,11 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             @Override
             public void onConnected() {
             	WebAppSession webAppSession = sessions.get(mediaAppId);
-            	if (connected && webAppSession != null) {
+            	if (connected && webAppSession != null
+            			&& mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
+            		
             		loadVideo(mediaInformation, listener, webAppSession);
+            		
             	} else {
 	                boolean relaunchIfRunning = false;
 	
