@@ -609,6 +609,29 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         playMedia(metadata, mediaUrl, mimeType, title, desc, iconSrc, shouldLoop, listener);
     }
 
+    
+    private void loadVideo(final com.google.android.gms.cast.MediaInfo mediaInformation, final LaunchListener listener, final WebAppSession webAppSession) {
+    	try {
+            mMediaPlayer.load(mApiClient, mediaInformation, true).setResultCallback(new ResultCallback<RemoteMediaPlayer.MediaChannelResult>() {
+
+                @Override
+                public void onResult(MediaChannelResult result) {
+                    Status status = result.getStatus();
+
+                    if (status.isSuccess()) {
+                        webAppSession.launchSession.setSessionType(LaunchSessionType.Media);
+
+                        Util.postSuccess(listener, new MediaLaunchObject(webAppSession.launchSession, CastService.this));
+                    }
+                    else {
+                        Util.postError(listener, new ServiceCommandError(status.getStatusCode(), status.getStatusMessage(), status));
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Util.postError(listener, new ServiceCommandError(0, "Unable to load", null));
+        }
+    }
     private void playMedia(final com.google.android.gms.cast.MediaInfo mediaInformation, final String mediaAppId, final LaunchListener listener) {
         final ApplicationConnectionResultCallback webAppLaunchCallback = new ApplicationConnectionResultCallback(new LaunchWebAppListener() {
 
@@ -618,26 +641,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
 
                     @Override
                     public void onConnected() {
-                        try {
-                            mMediaPlayer.load(mApiClient, mediaInformation, true).setResultCallback(new ResultCallback<RemoteMediaPlayer.MediaChannelResult>() {
-
-                                @Override
-                                public void onResult(MediaChannelResult result) {
-                                    Status status = result.getStatus();
-
-                                    if (status.isSuccess()) {
-                                        webAppSession.launchSession.setSessionType(LaunchSessionType.Media);
-
-                                        Util.postSuccess(listener, new MediaLaunchObject(webAppSession.launchSession, CastService.this));
-                                    }
-                                    else {
-                                        Util.postError(listener, new ServiceCommandError(status.getStatusCode(), status.getStatusMessage(), status));
-                                    }
-                                }
-                            });
-                        } catch (Exception e) {
-                            Util.postError(listener, new ServiceCommandError(0, "Unable to load", null));
-                        }
+                    	loadVideo(mediaInformation, listener, webAppSession);
                     }
                 };
 
@@ -656,19 +660,27 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
 
             @Override
             public void onConnected() {
-                boolean relaunchIfRunning = false;
-
-                try {
-                    if (Cast.CastApi.getApplicationStatus(mApiClient) == null || (!mediaAppId.equals(currentAppId))) {
-                        relaunchIfRunning = true;
-                    }
-
-                    LaunchOptions options = new LaunchOptions();
-                    options.setRelaunchIfRunning(relaunchIfRunning);
-                    Cast.CastApi.launchApplication(mApiClient, mediaAppId, options).setResultCallback(webAppLaunchCallback);
-                } catch (Exception e) {
-                    Util.postError(listener, new ServiceCommandError(0, "Unable to launch", null));
-                }
+            	WebAppSession webAppSession = sessions.get(mediaAppId);
+            	if (connected && webAppSession != null) {
+            		loadVideo(mediaInformation, listener, webAppSession);
+            	} else {
+	                boolean relaunchIfRunning = false;
+	
+	                try {
+	                	
+	                    if (Cast.CastApi.getApplicationStatus(mApiClient) == null || (!mediaAppId.equals(currentAppId))) {
+	                        relaunchIfRunning = true;
+	                    }
+	
+	                    LaunchOptions options = new LaunchOptions();
+	                    options.setRelaunchIfRunning(relaunchIfRunning);
+	                    Cast.CastApi.launchApplication(mApiClient, mediaAppId, options).setResultCallback(webAppLaunchCallback);
+	                    
+	                    
+	                } catch (Exception e) {
+	                    Util.postError(listener, new ServiceCommandError(0, "Unable to launch", null));
+	                }
+            	}
             }
         };
 
