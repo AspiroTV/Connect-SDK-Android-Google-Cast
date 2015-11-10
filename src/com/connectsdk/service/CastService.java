@@ -661,22 +661,25 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             @Override
             public void onConnected() {
             	WebAppSession webAppSession = sessions.get(mediaAppId);
+            	Log.d(Util.T, "Starting stream connected:" + connected + " mMediaPlayer:" + mMediaPlayer + " currentAppId:" + currentAppId);
             	if (connected && webAppSession != null
-            			&& mMediaPlayer != null && mMediaPlayer.getMediaStatus() != null) {
+            			&& mMediaPlayer != null && currentAppId != null) {
             		
+            		Log.d(Util.T, "Application:" + mediaAppId + " is already launched, playing the stream");
             		loadVideo(mediaInformation, listener, webAppSession);
             		
             	} else {
+                	String status = Cast.CastApi.getApplicationStatus(mApiClient);
 	                boolean relaunchIfRunning = false;
-	
 	                try {
-	                	
-	                    if (Cast.CastApi.getApplicationStatus(mApiClient) == null || (!mediaAppId.equals(currentAppId))) {
+	                	Log.d(Util.T, "Starting stream with the  status:" + status + " currentAppId:" + currentAppId);
+	                    if (status == null || (!mediaAppId.equals(currentAppId))) {
 	                        relaunchIfRunning = true;
 	                    }
 	
 	                    LaunchOptions options = new LaunchOptions();
 	                    options.setRelaunchIfRunning(relaunchIfRunning);
+	                    Log.d(Util.T, "Starting stream with the appId:" + mediaAppId + " relaunch:" + relaunchIfRunning);
 	                    Cast.CastApi.launchApplication(mApiClient, mediaAppId, options).setResultCallback(webAppLaunchCallback);
 	                    
 	                    
@@ -755,6 +758,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
                 // TODO Workaround, for some reason, if relaunchIfRunning is false, launchApplication returns 2005 error and cannot launch.
                 try {
                     if (relaunchIfRunning == false) {
+                    	Log.d(Util.T, "Join Application");
                         Cast.CastApi.joinApplication(mApiClient).setResultCallback(new ResultCallback<Cast.ApplicationConnectionResult>() {
 
                             @Override
@@ -794,6 +798,7 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
                         });
                     }
                     else {
+                    	Log.d(Util.T, "Launching Application relaunch:" + relaunchIfRunning);
                         LaunchOptions options = new LaunchOptions();
                         options.setRelaunchIfRunning(relaunchIfRunning);
 
@@ -1163,19 +1168,20 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
     private class CastListener extends Cast.Listener {
         @Override
         public void onApplicationDisconnected(int statusCode) {
-            Log.d(Util.T, "Cast.Listener.onApplicationDisconnected: " + statusCode);
+            Log.d(Util.T, "Cast.Listener.onApplicationDisconnected: " + statusCode + " currentAppId:" + currentAppId);
 
             if (currentAppId == null)
                 return;
 
             CastWebAppSession webAppSession = sessions.get(currentAppId);
 
+            sessions.remove(currentAppId);
+            currentAppId = null;
+
             if (webAppSession == null)
                 return;
 
             webAppSession.handleAppClose();
-
-            currentAppId = null;
         }
 
         @Override
@@ -1341,9 +1347,10 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
             Status status = result.getStatus();
 
             if (status.isSuccess()) {
+            	
                 ApplicationMetadata applicationMetadata = result.getApplicationMetadata();
                 currentAppId = applicationMetadata.getApplicationId();
-
+                
                 LaunchSession launchSession = LaunchSession.launchSessionForAppId(applicationMetadata.getApplicationId());
                 launchSession.setAppName(applicationMetadata.getName());
                 launchSession.setSessionId(result.getSessionId());
