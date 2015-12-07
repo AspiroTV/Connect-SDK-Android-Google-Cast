@@ -1454,10 +1454,13 @@ public class CastService extends DeviceService implements MediaPlayer, MediaCont
         }
     }
 
+    @Override
     public void addMessageReceiver(
-            final com.google.android.gms.cast.Cast.MessageReceivedCallback callback,
+            final Object object,
             final String namespace) {
 
+    	final com.google.android.gms.cast.Cast.MessageReceivedCallback callback = (com.google.android.gms.cast.Cast.MessageReceivedCallback) object;
+    	
         this.messageCallbackNamespace = namespace;
         this.messageCallback = callback;
         Log.v("Cast", "adding messageReceiver" + namespace);
